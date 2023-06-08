@@ -1,8 +1,10 @@
 const { send, emitWarning } = require('process');
 
 require('json');
-const logTargetIP = '10.1.1.9';
+// const logTargetIP = '10.1.1.9';
 const webServerIP = '10.0.10.188';
+const webTargetIP = 'scheff-external-logger.sa.f5demos.com';
+const webTargetPort = 80;
 const webServerPort = 3000;
 const logServerPort = 15514;
 
@@ -14,33 +16,28 @@ startSyslog();
 
 var logIdx = 0;
 var logEntries = [];
-
+const querystring = require("querystring");
 
 function startSyslog() {
-    const querystring = require("querystring");
+    // const querystring = require("querystring");
     const net = require('net');
 
     const server = net.createServer((socket) => {
         socket.on('data', (data) => {
-            var incomingData = querystring.unescape(data);
-            var jsonData = {};
-
-            console.log("We got a log message");
-
             try {
+                var incomingData = querystring.unescape(data);
+                var jsonData = {};
+
                 var jsonData = JSON.parse(incomingData);
-            } catch (error) {
-                console.log(error);
-            }
+                // console.log(jsonData.response);
+                logEntries.push(jsonData.response);
 
-            logEntries.push(jsonData.response);
-            try {
                 sendRequest(jsonData.request, jsonData.response, logIdx);
+                logIdx = logIdx + 1;
             } catch (error) {
                 console.log(error);
+                console.log(querystring.unescape(data));
             }
-            logIdx = logIdx + 1;
-
         });
 
         socket.on('end', () => {
@@ -65,22 +62,29 @@ function startSyslog() {
 function sendRequest(reqIn, respIn, outIdx) {
 
     const http = require('http');
-    try {
-        console.log(reqIn.headers);
-    } catch (error) {
-        console.log('Error accessing headers');
-    }
+    // try {
+    //     console.log(reqIn.headers);
+    // } catch (error) {
+    //     console.log('Error accessing headers');
+    //     console.log(`Request ${reqIn}`);
+    // }
     let headers = reqIn.headers;
     headers["logIdx"] = outIdx;
+    headers["host"] = webTargetIP;
 
     const options = {
-        hostname: webServerIP,
-        port: webServerPort,
+        hostname: webTargetIP,
+        port: webTargetPort,
         path: reqIn.uri,
         method: reqIn.method,
         rejectUnauthorized: false,
         headers: headers
-    };
+    }
+
+    // we are passed the URL + Query String as [http::uri] so, we should be good
+    if (reqIn.method.toLowerCase() == "get" ) {
+        // handle the request string
+    }
 
     const req = http.request(options, (res) => {
         let data = '';
@@ -92,11 +96,18 @@ function sendRequest(reqIn, respIn, outIdx) {
 
         // The whole response has been received.
         res.on('end', () => {
-            console.log('Got a response');
-            console.log(data);
+            // console.log('Got a response');
+            // const escapedData = querystring.unescape(data);
+            // console.log(`Data: ${escapedData}`);
         });
 
     });
+
+    try {
+        req.write("{data}");
+    } catch (error) {
+        console.log(`Error sending payload ${error.message}`);        
+    }
 
     req.on('error', (e) => {
         console.error(`Problem with request: ${e.message}`);
@@ -117,16 +128,20 @@ function createWebServer() {
         // console.log('Hey there!');
         // console.log(req);
         res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/plain');
-        // try {
-        //     console.log(`Sending: ${JSON.stringify(logEntries[req.headers['logidx']].payload)}`);
-        // } catch (error) {
-        //     console.log(error);            
-        // }
+        
         try {
-            if (typeof req.headers['logidx'] == 'undefined' ){
+            if (typeof req.headers['logidx'] == 'undefined') {
                 res.end("Success");
             } else {
+                try {
+                    logEntry = JSON.parse(logEntries[req.headers['logidx']]);
+                    res.setHeader('Content-Type', logEntries[req.headers['logidx']].headers["content-type"]);
+                } catch (error) {
+                    console.log(`Error setting content type ${error.message} \n\n${logEntries[0]}`);
+
+                }                
+                // console.log(req);
+                // res.end("we made it here");
                 res.end(logEntries[req.headers['logidx']].payload);
             }
         } catch (error) {
@@ -137,7 +152,7 @@ function createWebServer() {
     });
 
     server.listen(webServerPort, webServerIP, () => {
-        console.log('Server running at http://'+ webServerIP + ':' + webServerPort + '/');
+        console.log('Server running at http://' + webServerIP + ':' + webServerPort + '/');
     });
 }
 
