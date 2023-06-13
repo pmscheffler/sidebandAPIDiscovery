@@ -23,13 +23,36 @@ function startSyslog() {
     const net = require('net');
 
     const server = net.createServer((socket) => {
-        let dataChunks = [];
-
+        let utf8Encode = new TextEncoder();
+        const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
+        
         socket.setTimeout(1000);
-
-        socket.on('data', chunk => {
+        
+        socket.on('data', data => {
             try {
-                dataChunks.push(chunk);
+                var packetData = data.toString().split('\n');
+                packetData.forEach(function(packet) {
+                    if (packet.length > 0) {
+                        try {
+                            var jsonData = JSON.parse(querystring.unescape(packet));
+                            // refactor to add to redis db
+                            // console.log(jsonData);
+                            logEntries.push(jsonData.response);
+
+                            let dataChunks = [];
+                
+                            sendRequest(jsonData.request, logIdx);
+                            logIdx = logIdx + 1;
+                        } catch (error) {
+                            console.log(error);
+                            console.log(querystring.unescape(packet));
+                            dataChunks.push(packet);
+                        }
+            
+                    }
+                });
+
+                // dataChunks.push(chunk);
                 // console.log(chunk.toString());
                 // console.log(`we got data ${dataChunks}`);
 
@@ -37,27 +60,17 @@ function startSyslog() {
                 console.log(error.message);
                 
             }
-            // try {
-            //     var jsonData = JSON.parse(querystring.unescape(data));
-            //     // refactor to add to redis db
-            //     console.log(jsonData);
-            //     logEntries.push(jsonData.response);
-    
-            //     sendRequest(jsonData.request, logIdx);
-            //     logIdx = logIdx + 1;
-            // } catch (error) {
-            //     console.log(error);
-            //     console.log(querystring.unescape(data));
-            // }
         });
         socket.on('end', () => {
             
             try {
                 console.log(`Closed ${dataChunks.length}`);
+
                 let data = Buffer.concat(dataChunks).toString();
-                console.log(`data: ${data}`);
+                // console.log(`data: ${data}`);
 
                 if (dataChunks.length > 0 ){
+                    console.log('In close, with dataChunks > 0');
                     var jsonData = JSON.parse(querystring.unescape(data));
                     // refactor to add to redis db
                     console.log(jsonData);
@@ -66,7 +79,7 @@ function startSyslog() {
                     sendRequest(jsonData.request, logIdx);
                     logIdx = logIdx + 1;
                 } else {
-                    console.log('client disconnected');
+                    // console.log('client disconnected');
                 }
             } catch (error) {
                 console.log(error);
