@@ -1,10 +1,10 @@
 when RULE_INIT priority 900 {
 	# Log debug locally to /var/log/ltm? 1=yes, 0=no
-	set static::f5_api_hsl_debug 0
+	set static::f5_api_hsl_debug 1
 	# Pool name to post the API activity data to
 	set static::f5_api_hsl_pool "/Common/f5_api-collector-pool"
 	# Maximum payload size
-	set static::f5_api_max_payload 10240
+	set static::f5_api_max_payload 102400
 }
 
 when CLIENT_ACCEPTED priority 900 {
@@ -24,11 +24,19 @@ when CLIENT_ACCEPTED priority 900 {
 when HTTP_REQUEST priority 900 {
 	# If the HSL pool is down, do not run more code here
 	if { not ($bypass) && not ([HTTP::has_responded]) } {
-
+        if { [HTTP::header exists "Accept-Encoding"]} {
+            HTTP::header remove Accept-Encoding 
+        }
 
 		set reqJsonArrayStr "\{"
 		foreach headerName [HTTP::header names] {
-			append reqJsonArrayStr "\"$headerName\": \"[URI::encode [HTTP::header value $headerName]]\","
+		    if { [ string tolower $headerName ] equals "authorization" } {
+		        log local0. "Auth: [URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]"
+		        append reqJsonArrayStr "\"$headerName\": \"[URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]\","
+		    } else {
+		    
+			    append reqJsonArrayStr "\"$headerName\": \"[URI::encode [HTTP::header value $headerName]]\","
+		    }
 		}
 		set reqJsonArrayStr [string trimright $reqJsonArrayStr ,]
 		append reqJsonArrayStr "\}"
@@ -83,6 +91,7 @@ when HTTP_RESPONSE priority 900 {
 			}
 			if { [ catch { HTTP::collect $collectsize } ] } {
 				log local0. "Error collecting chunked response payload"
+				# log local0. "Request: $req_data"
 			}
 		} else {
 			set res_chunked 0
@@ -93,6 +102,7 @@ when HTTP_RESPONSE priority 900 {
 
 			if { [ catch { HTTP::collect $collectsize } ] } {
 				log local0. "Error collecting response payload"
+				# log local0. "Request: $req_data"
 			}
 		}
 	}
@@ -129,8 +139,10 @@ when HTTP_RESPONSE_DATA priority 900 {
 		}
 		set res_data_msg [ concat "\"response\": { $res_data_msg }" ]
 
+		# set res_data_msg "\"response\":\"\""
+log local0. "Sending: {$req_data_msg, $res_data_msg}"
 		# URI Encode the whole message to ensure message sent as single log event
-		if { [ catch { HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"]\n" } ] } {
+		if { [ catch { HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n" } ] } {
 			log local0. "Error sending data to HSL"
 		}
 	}
