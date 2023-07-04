@@ -9,9 +9,7 @@ const webTargetIP = 'scheff-external-logger.sa.f5demos.com';
 const webTargetPort = 80;
 const webServerPort = 3000;
 const logServerPort = 15514;
-const managementPort = 30080;
-
-var logIdx = 0;
+// var logIdx = 0;
 var logEntries = [];
 const querystring = require("querystring");
 
@@ -27,21 +25,27 @@ function startSyslog() {
     const net = require('net');
     const tls = require('tls');
     const fs = require('fs');
-    
+    const crypto = require("crypto");
+
     const tlsOptions = {
         key: fs.readFileSync('privateKey.key'),
         cert: fs.readFileSync('certificate.crt')
     };
-    
+
     const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
 
     const server = tls.createServer(tlsOptions, (socket) => {
         let utf8Encode = new TextEncoder();
-        
+
+        // console.log('server connected',
+            // socket.authorized ? 'authorized' : 'unauthorized');
+
         socket.setTimeout(1000);
         
         socket.on('data', data => {
             try {
+                // console.log('data');
+
                 var packetData = data.toString().split('\n');
                 packetData.forEach(function(packet) {
                     if (packet.length > 0) {
@@ -49,12 +53,19 @@ function startSyslog() {
                             var jsonData = JSON.parse(querystring.unescape(packet));
                             // refactor to add to redis db
                             // console.log(jsonData);
-                            logEntries.push(jsonData.response);
+                            const logIdx = crypto.randomBytes(16).toString("hex");
+
+                            const newElement = {
+                                key: logIdx,
+                                response: jsonData.response
+                            }
+    
+                            logEntries.push(newElement);
 
                             let dataChunks = [];
                 
                             sendRequest(jsonData.request, logIdx);
-                            logIdx = logIdx + 1;
+                            // logIdx = logIdx + 1;
                         } catch (error) {
                             // console.log(error);
                             // console.log(querystring.unescape(packet));
@@ -75,7 +86,7 @@ function startSyslog() {
             }
         });
         socket.on('end', () => {
-            
+            // console.log('closed');            
             try {
                 // console.log(`Closed ${dataChunks.length}`);
 
@@ -89,11 +100,22 @@ function startSyslog() {
                     closeData.forEach(function(cData){
                         var jsonData = JSON.parse(querystring.unescape(cData));
                         // refactor to add to redis db
-                        console.log(jsonData);
-                        logEntries.push(jsonData.response);
+                        // console.log(jsonData);
+
+                        const logIdx = crypto.randomBytes(16).toString("hex");
+
+                        const newElement = {
+                            key: logIdx,
+                            response: jsonData.response
+                        }
+
+                        logEntries.push(newElement);
+
+
+                        // logEntries.push(jsonData.response);
                         
                         sendRequest(jsonData.request, logIdx);
-                        logIdx = logIdx + 1;
+                        // logIdx = logIdx + 1;
                     });
                 } else {
                     // console.log('client disconnected');
@@ -112,6 +134,15 @@ function startSyslog() {
         //     .clientSocket.end();
         // }, timeout);
     });
+
+
+    server.on('connection', function(c){
+        // console.log('insecure connection');
+    })
+
+    server.on('secureConnection', function(c){
+        // console.log('secure connection');
+    })
 
     server.on('error', (err) => {
         console.error(`Server error: ${err}`);
@@ -157,6 +188,9 @@ function sendRequest(reqIn, outIdx) {
             // console.log('Got a response');
             // const escapedData = querystring.unescape(data);
             // console.log(`Data: ${escapedData}`);
+
+            // TODO: clear data from array/db
+
         });
 
     });
@@ -182,21 +216,31 @@ function createWebServer() {
 
         try {
             if (typeof req.headers['logidx'] == 'undefined') {
-                res.end("Success");
+                res.setHeader('Content-Type', "application/json");
+                res.end("{\"message\": \"Success\"}");
             } else {
-                try {
-                    res.setHeader('Content-Type', logEntries[req.headers['logidx']].headers["Content-Type"]);
-                    res.statusCode = logEntries[req.headers['logidx']].status;
+                const logEntry = logEntries.find(element => element.key === req.headers['logidx']);
+                if (logEntry) {
+                    const logResponse = logEntry.response;
+                    // console.log(`Log Entry for ${req.headers['logidx']}`, logResponse);
+                    // res.setHeader('Content-Type', logResponse.headers["Content-Type"]);
+                    res.headers = logResponse.headers;
+                    res.statusCode = logEntry.response.status;
+                    res.end(logResponse.payload);
+                    // console.log(`Sent: `, logResponse.payload);
 
-                } catch (error) {
-                    console.log(`Error setting content type ${error.message} \n\n${logEntries[0]}`);
-
+                } else {
+                    console.log(`Log Entry not found for ${req.headers['logidx']}`)
+                    res.setHeader('Content-Type', "application/json");
+                    res.statusCode = 500;
+                    res.end(`Error setting content type ${error.message}\n\n`);
                 }
-                res.end(logEntries[req.headers['logidx']].payload);
+                // logEntries[req.headers['logIdx']] = [];
             }
         } catch (error) {
-            console.log(error);
-            res.statusCode = 200;
+            // console.log(error);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', "application/json");
             res.end('{"error":"Internal server error"}');
         }
     });
@@ -205,6 +249,7 @@ function createWebServer() {
         console.log('Server running at http://' + webServerIP + ':' + webServerPort + '/');
     });
 }
+
 
 function createManagementAPI() {
     const httpWS = require('http');
