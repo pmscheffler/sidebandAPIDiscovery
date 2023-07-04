@@ -1,6 +1,7 @@
 const { send, emitWarning } = require('process');
 
 require('json');
+
 const util = require('util')
 // const logTargetIP = '10.1.1.9';
 const webServerIP = '10.0.10.188';
@@ -8,6 +9,8 @@ const webTargetIP = 'scheff-external-logger.sa.f5demos.com';
 const webTargetPort = 80;
 const webServerPort = 3000;
 const logServerPort = 15514;
+const managementPort = 30080;
+
 var logIdx = 0;
 var logEntries = [];
 const querystring = require("querystring");
@@ -20,11 +23,20 @@ startSyslog();
 
 
 function startSyslog() {
-    const net = require('net');
 
-    const server = net.createServer((socket) => {
+    const net = require('net');
+    const tls = require('tls');
+    const fs = require('fs');
+    
+    const tlsOptions = {
+        key: fs.readFileSync('privateKey.key'),
+        cert: fs.readFileSync('certificate.crt')
+    };
+    
+    const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
+
+    const server = tls.createServer(tlsOptions, (socket) => {
         let utf8Encode = new TextEncoder();
-        const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
         
         socket.setTimeout(1000);
         
@@ -44,11 +56,12 @@ function startSyslog() {
                             sendRequest(jsonData.request, logIdx);
                             logIdx = logIdx + 1;
                         } catch (error) {
-                            console.log(error);
-                            console.log(querystring.unescape(packet));
-                            dataChunks.push(packet);
+                            // console.log(error);
+                            // console.log(querystring.unescape(packet));
+                            dataChunks.push(utf8Encode.encode(packet));
+                            // console.log(`Catch ${dataChunks.length}`);
                         }
-            
+                        
                     }
                 });
 
@@ -64,20 +77,24 @@ function startSyslog() {
         socket.on('end', () => {
             
             try {
-                console.log(`Closed ${dataChunks.length}`);
+                // console.log(`Closed ${dataChunks.length}`);
 
                 let data = Buffer.concat(dataChunks).toString();
                 // console.log(`data: ${data}`);
-
+                
                 if (dataChunks.length > 0 ){
-                    console.log('In close, with dataChunks > 0');
-                    var jsonData = JSON.parse(querystring.unescape(data));
-                    // refactor to add to redis db
-                    console.log(jsonData);
-                    logEntries.push(jsonData.response);
-                    
-                    sendRequest(jsonData.request, logIdx);
-                    logIdx = logIdx + 1;
+                    // console.log('In close, with dataChunks > 0');
+                    dataChunks.length = 0;
+                    closeData = data.toString().split('\n');
+                    closeData.forEach(function(cData){
+                        var jsonData = JSON.parse(querystring.unescape(cData));
+                        // refactor to add to redis db
+                        console.log(jsonData);
+                        logEntries.push(jsonData.response);
+                        
+                        sendRequest(jsonData.request, logIdx);
+                        logIdx = logIdx + 1;
+                    });
                 } else {
                     // console.log('client disconnected');
                 }
@@ -189,3 +206,32 @@ function createWebServer() {
     });
 }
 
+function createManagementAPI() {
+    const httpWS = require('http');
+
+    const server = httpWS.createServer((req, res) => {
+        // listen for a call of a particular port for commands to manage the Server
+
+        // /logserver
+        // manage the log server
+        //    /state POST {"enable": Boolean} => { "result" : success/failure, "message": ""}
+        //    /status GET { returns info on the server }
+        //    /port POST { "port": Int }
+        //    /hostname POST { "hostname": String }
+        //    /logging POST { "level": "info/debug/error"}
+
+        // /webserver
+        // manage the web server
+        //    /state POST {"enable": Boolean} => { "result" : success/failure, "message": ""}
+        //    /status GET { returns info on the server }
+        //    /port POST { "port": Int }
+        //    /hostname POST { "hostname": String }
+        //    /logging POST { "level": "info/debug/error"}
+        //    
+
+    });
+
+    server.listen(webServerPort, webServerIP, () => {
+        console.log('Server running at http://' + webServerIP + ':' + managementPort + '/');
+    });    
+}

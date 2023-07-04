@@ -24,19 +24,19 @@ when CLIENT_ACCEPTED priority 900 {
 when HTTP_REQUEST priority 900 {
 	# If the HSL pool is down, do not run more code here
 	if { not ($bypass) && not ([HTTP::has_responded]) } {
-        if { [HTTP::header exists "Accept-Encoding"]} {
-            HTTP::header remove Accept-Encoding 
-        }
+		if { [HTTP::header exists "Accept-Encoding"]} {
+			HTTP::header remove Accept-Encoding
+		}
 
 		set reqJsonArrayStr "\{"
 		foreach headerName [HTTP::header names] {
-		    if { [ string tolower $headerName ] equals "authorization" } {
-		        log local0. "Auth: [URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]"
-		        append reqJsonArrayStr "\"$headerName\": \"[URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]\","
-		    } else {
-		    
-			    append reqJsonArrayStr "\"$headerName\": \"[URI::encode [HTTP::header value $headerName]]\","
-		    }
+			if { [ string tolower $headerName ] equals "authorization" } {
+				log local0. "Auth: [URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]"
+				append reqJsonArrayStr "\"$headerName\": \"[URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]\","
+			} else {
+
+				append reqJsonArrayStr "\"$headerName\": \"[URI::encode [HTTP::header value $headerName]]\","
+			}
 		}
 		set reqJsonArrayStr [string trimright $reqJsonArrayStr ,]
 		append reqJsonArrayStr "\}"
@@ -125,7 +125,12 @@ when HTTP_RESPONSE_DATA priority 900 {
 		# Formatting HTTP response data
 		set resJsonArrayStr "\{"
 		foreach headerName [HTTP::header names] {
-			append resJsonArrayStr "\"$headerName\": \"[URI::encode [HTTP::header value $headerName]]\","
+			set headerValue [URI::encode [HTTP::header value $headerName]]
+			
+			if { [class match $headerName equals protected_fields ] } {
+				set headerValue  [class match -value $headerName equals protected_fields ]
+			} 
+			append resJsonArrayStr "\"$headerName\": \"$headerValue\","
 		}
 		set resJsonArrayStr [string trimright $resJsonArrayStr ,]
 		append resJsonArrayStr "\}"
@@ -140,16 +145,17 @@ when HTTP_RESPONSE_DATA priority 900 {
 		set res_data_msg [ concat "\"response\": { $res_data_msg }" ]
 
 		# set res_data_msg "\"response\":\"\""
-log local0. "Sending: {$req_data_msg, $res_data_msg}"
+		log local0. "Sending: {$req_data_msg, $res_data_msg}"
+		HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n"
 		# URI Encode the whole message to ensure message sent as single log event
-		if { [ catch { HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n" } ] } {
-			log local0. "Error sending data to HSL"
-		}
+		# if { [ catch { HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n" } ] } {
+		# 	log local0. "Error sending data to HSL"
+		# }
 	}
 }
 
 when HTTP_RESPONSE_RELEASE priority 900 {
-    if { [info exists req_data] } { unset req_data }
+	if { [info exists req_data] } { unset req_data }
 	if { [info exists req_data_msg] } { unset req_data_msg }
 	if { [info exists res_data_msg] } { unset res_data_msg }
 	if { [info exists resJsonArrayStr] } { unset resJsonArrayStr }
