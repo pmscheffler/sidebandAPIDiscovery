@@ -4,7 +4,7 @@ require('json');
 
 const util = require('util')
 // const logTargetIP = '10.1.1.9';
-const webServerIP = '10.0.10.188';
+const webServerIP = '127.0.0.1';
 const webTargetIP = 'scheff-external-logger.sa.f5demos.com';
 const webTargetPort = 80;
 const webServerPort = 3000;
