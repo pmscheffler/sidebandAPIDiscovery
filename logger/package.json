@@ -1,0 +1,20 @@
+{
+    "name": "out-of-band-api-discovery",
+    "version": "1.0.0",
+    "description": "Logging Server which sends traffic out to be analyzed for APIs",
+    "author": {
+        "name": "Peter Scheffler",
+        "email": "scheff@f5.com",
+        "url": "https://github.com/pmscheffler/sidebandAPIDiscovery"
+    },
+    "main": "apilogger.js",
+    "scripts": {
+        "start": "node apilogger.js"
+    },
+    "dependencies": {
+        "http": "^0.0.1-security",
+        "json": "11.0.0",
+        "query-string": "8.1.0"
+    }
+
+}

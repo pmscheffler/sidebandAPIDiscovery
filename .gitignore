@@ -1,4 +1,6 @@
 .donotpost
-scratch.*
+scratch/*
 .DS*
 *.pcap
+*.key
+*.crt
