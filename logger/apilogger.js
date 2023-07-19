@@ -9,7 +9,7 @@ const winston = require('winston');
 // const logTargetIP = '10.1.1.9';
 const logger = winston.createLogger({
     level: 'info',
-    format: winston.format.json,
+    format: winston.format.json(),
     defaultMeta: { service: 'user-service' },
     transports: [
       //
