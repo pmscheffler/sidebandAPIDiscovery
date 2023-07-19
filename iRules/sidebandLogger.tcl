@@ -43,6 +43,7 @@ when HTTP_REQUEST priority 900 {
 
 		set http_request [HTTP::request]
 		set req_data(payload) ""
+		set req_data(clientip) [IP::client_addr]
 		set req_data(headers) $reqJsonArrayStr
 		set req_data(method) \"[HTTP::method]\"
 		set req_data(uri) \"[HTTP::uri]\"
@@ -115,7 +116,8 @@ when HTTP_RESPONSE_DATA priority 900 {
 			\"virtualServerName\": \"[URI::encode [virtual name] ]\", \
 			\"method\": $req_data(method), \
 			\"requestTimestamp\": $requestTime, \
-			\"uri\": $req_data(uri)"
+			\"uri\": \"$req_data(uri)\"," \
+			\"clientip": \"$req_data(clientip)\""
 
 		if { [string length $req_data(payload)] > 0 } {
 			set req_data_msg [ concat $req_data_msg ",\"payload\": \"[URI::encode $req_data(payload)]\"" ]

@@ -11,6 +11,7 @@ const webServerPort = 3000;
 const logServerPort = 15514;
 // var logIdx = 0;
 var logEntries = [];
+var vipTargets = [];
 const querystring = require("querystring");
 
 // Start a web server which will receive our requests
@@ -18,7 +19,6 @@ createWebServer();
 
 // start the syslog server which will get the data from the iRule
 startSyslog();
-
 
 function startSyslog() {
 
@@ -32,22 +32,36 @@ function startSyslog() {
         cert: fs.readFileSync('certificate.crt')
     };
 
+    // load the VIP list
+    const vipList = fs.readFileSync('viplist.csv', 'utf-8');
+    vipList.split(/\r?\n/).forEach(line => {
+        try {
+            const lineData = line.split(",");
+            const newVIP = {
+                vip: lineData[0],
+                target: lineData[1]
+            }
+            vipTargets.push(newVIP);
+        } catch (error) {
+            console.log(`Error reading targets: ${error.message}`);
+        }
+    });
     const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
 
     const server = tls.createServer(tlsOptions, (socket) => {
         let utf8Encode = new TextEncoder();
 
         // console.log('server connected',
-            // socket.authorized ? 'authorized' : 'unauthorized');
+        // socket.authorized ? 'authorized' : 'unauthorized');
 
         socket.setTimeout(1000);
-        
+
         socket.on('data', data => {
             try {
                 // console.log('data');
 
                 var packetData = data.toString().split('\n');
-                packetData.forEach(function(packet) {
+                packetData.forEach(function (packet) {
                     if (packet.length > 0) {
                         try {
                             var jsonData = JSON.parse(querystring.unescape(packet));
@@ -59,11 +73,11 @@ function startSyslog() {
                                 key: logIdx,
                                 response: jsonData.response
                             }
-    
+
                             logEntries.push(newElement);
 
                             let dataChunks = [];
-                
+
                             sendRequest(jsonData.request, logIdx);
                             // logIdx = logIdx + 1;
                         } catch (error) {
@@ -72,7 +86,7 @@ function startSyslog() {
                             dataChunks.push(utf8Encode.encode(packet));
                             // console.log(`Catch ${dataChunks.length}`);
                         }
-                        
+
                     }
                 });
 
@@ -82,7 +96,7 @@ function startSyslog() {
 
             } catch (error) {
                 console.log(error.message);
-                
+
             }
         });
         socket.on('end', () => {
@@ -92,12 +106,12 @@ function startSyslog() {
                 // console.log(`Closed ${dataChunks.length}`);
 
                 // console.log(`data: ${data}`);
-                
-                if (dataChunks.length > 0 ){
+
+                if (dataChunks.length > 0) {
                     // console.log('In close, with dataChunks > 0');
                     dataChunks.length = 0;
                     closeData = data.toString().split('\n');
-                    closeData.forEach(function(cData){
+                    closeData.forEach(function (cData) {
                         var jsonData = JSON.parse(querystring.unescape(cData));
                         // refactor to add to redis db
                         console.log(jsonData);
@@ -113,7 +127,7 @@ function startSyslog() {
 
 
                         // logEntries.push(jsonData.response);
-                        
+
                         sendRequest(jsonData.request, logIdx);
                         // logIdx = logIdx + 1;
                     });
@@ -137,11 +151,11 @@ function startSyslog() {
     });
 
 
-    server.on('connection', function(c){
+    server.on('connection', function (c) {
         // console.log('insecure connection');
     })
 
-    server.on('secureConnection', function(c){
+    server.on('secureConnection', function (c) {
         // console.log('secure connection');
     })
 
@@ -161,8 +175,18 @@ function sendRequest(reqIn, outIdx) {
     headers["logIdx"] = outIdx;
     headers["host"] = webTargetIP;
 
+    if (typeof headers["x-forwarded-for"] == 'undefined') {
+        // need to get the client IP added to the request log data
+        headers["x-forwarded-for"] = "";
+    } else {
+        headers["x-forwarded-for"] = reqIn.clientip.concat(",".concat(headers["x-forwarded-for"]));
+    }
+
+    // find the proper XC LB to send the mimicked request to
+    const vipTarget = vipTargets.find(element => element.key === reqIn.virtualServerName);
+
     const options = {
-        hostname: webTargetIP,
+        hostname: vipTargetIP,
         port: webTargetPort,
         path: reqIn.uri,
         method: reqIn.method,
@@ -227,7 +251,7 @@ function createWebServer() {
                     // console.log(`Log Entry for ${req.headers['logidx']}`, logResponse);
                     // res.setHeader('Content-Type', logResponse.headers["Content-Type"]);
                     res.headers = logResponse.headers;
-                    res.statusCode = logEntry.response.status;
+                    res.statusCode = logResponse.status;
                     res.end(logResponse.payload);
                     // console.log(`Sent: `, logResponse.payload);
 
@@ -256,13 +280,13 @@ function createWebServer() {
 function removeElement(array, removeKey) {
     const index = array.findIndex(element => element.key === removeKey);
     if (index !== -1) {
-      // Remove the element from the array
-      array.splice(index, 1);
-      console.log(`Element with key "${removeKey}" removed successfully.`);
+        // Remove the element from the array
+        array.splice(index, 1);
+        console.log(`Element with key "${removeKey}" removed successfully.`);
     } else {
-      console.log(`Element with key "${removeKey}" not found.`);
+        console.log(`Element with key "${removeKey}" not found.`);
     }
-  }
+}
 
 function createManagementAPI() {
     const httpWS = require('http');
@@ -291,5 +315,5 @@ function createManagementAPI() {
 
     server.listen(webServerPort, webServerIP, () => {
         console.log('Server running at http://' + webServerIP + ':' + managementPort + '/');
-    });    
+    });
 }
