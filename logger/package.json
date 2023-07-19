@@ -14,7 +14,8 @@
     "dependencies": {
         "http": "^0.0.1-security",
         "json": "11.0.0",
-        "query-string": "8.1.0"
+        "query-string": "8.1.0",
+        "winston": "3.10.0"
     }
 
 }

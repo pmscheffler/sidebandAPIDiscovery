@@ -3,7 +3,25 @@ const { send, emitWarning } = require('process');
 require('json');
 
 const util = require('util')
+const querystring = require("querystring");
+const winston = require('winston');
+
 // const logTargetIP = '10.1.1.9';
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.json,
+    defaultMeta: { service: 'user-service' },
+    transports: [
+      //
+      // - Write all logs with importance level of `error` or less to `error.log`
+      // - Write all logs with importance level of `info` or less to `combined.log`
+      //
+      new winston.transports.Console(),
+      new winston.transports.File({ filename: 'error.log', level: 'error' }),
+      new winston.transports.File({ filename: 'combined.log' }),
+    ],    
+});
+
 const webServerIP = '127.0.0.1';
 const webTargetIP = 'scheff-external-logger.sa.f5demos.com';
 const webTargetPort = 80;
@@ -12,7 +30,6 @@ const logServerPort = 15514;
 // var logIdx = 0;
 var logEntries = [];
 var vipTargets = [];
-const querystring = require("querystring");
 
 // Start a web server which will receive our requests
 createWebServer();
@@ -21,6 +38,7 @@ createWebServer();
 startSyslog();
 
 function startSyslog() {
+    
 
     const net = require('net');
     const tls = require('tls');
@@ -28,8 +46,8 @@ function startSyslog() {
     const crypto = require("crypto");
 
     const tlsOptions = {
-        key: fs.readFileSync('privateKey.key'),
-        cert: fs.readFileSync('certificate.crt')
+        key: fs.readFileSync('/etc/ssl/privateKey.key'),
+        cert: fs.readFileSync('/etc/ssl/certificate.crt')
     };
 
     // load the VIP list
@@ -43,7 +61,7 @@ function startSyslog() {
             }
             vipTargets.push(newVIP);
         } catch (error) {
-            console.log(`Error reading targets: ${error.message}`);
+            logger.error(`Error reading targets: ${error.message}`);
         }
     });
     const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
@@ -51,14 +69,13 @@ function startSyslog() {
     const server = tls.createServer(tlsOptions, (socket) => {
         let utf8Encode = new TextEncoder();
 
-        // console.log('server connected',
-        // socket.authorized ? 'authorized' : 'unauthorized');
+        logger.verbose('server connected', socket.authorized ? 'authorized' : 'unauthorized');
 
         socket.setTimeout(1000);
 
         socket.on('data', data => {
             try {
-                // console.log('data');
+                logger.verbose('data');
 
                 var packetData = data.toString().split('\n');
                 packetData.forEach(function (packet) {
@@ -66,7 +83,7 @@ function startSyslog() {
                         try {
                             var jsonData = JSON.parse(querystring.unescape(packet));
                             // refactor to add to redis db
-                            // console.log(jsonData);
+                            logger.verbose(jsonData);
                             const logIdx = crypto.randomBytes(16).toString("hex");
 
                             const newElement = {
@@ -79,14 +96,11 @@ function startSyslog() {
                             let dataChunks = [];
 
                             sendRequest(jsonData.request, logIdx);
-                            // logIdx = logIdx + 1;
                         } catch (error) {
-                            // console.log(error);
-                            // console.log(querystring.unescape(packet));
+                            logger.error(error);
+                            logger.verbose(querystring.unescape(packet));
                             dataChunks.push(utf8Encode.encode(packet));
-                            // console.log(`Catch ${dataChunks.length}`);
                         }
-
                     }
                 });
 
@@ -100,21 +114,18 @@ function startSyslog() {
             }
         });
         socket.on('end', () => {
-            // console.log('closed');            
+            logger.verbose('closed');            
             let data = Buffer.concat(dataChunks).toString();
             try {
-                // console.log(`Closed ${dataChunks.length}`);
-
-                // console.log(`data: ${data}`);
+                logger.verbose(`data: ${data}`);
 
                 if (dataChunks.length > 0) {
-                    // console.log('In close, with dataChunks > 0');
                     dataChunks.length = 0;
                     closeData = data.toString().split('\n');
                     closeData.forEach(function (cData) {
                         var jsonData = JSON.parse(querystring.unescape(cData));
                         // refactor to add to redis db
-                        console.log(jsonData);
+                        logger.verbose(jsonData);
 
                         const logIdx = crypto.randomBytes(16).toString("hex");
 
@@ -124,30 +135,20 @@ function startSyslog() {
                         }
 
                         logEntries.push(newElement);
-
-
-                        // logEntries.push(jsonData.response);
-
                         sendRequest(jsonData.request, logIdx);
-                        // logIdx = logIdx + 1;
                     });
                 } else {
-                    // console.log('client disconnected');
+                    logger.verbose('client disconnected');
                 }
             } catch (error) {
-                console.log(error);
-                console.log(querystring.unescape(data));
-                // console.log(querystring.unescape(data));
+                logger.error(error);
+                logger.verbose(querystring.unescape(data));
             }
         });
 
         socket.on('error', (err) => {
             console.error(err);
         });
-        // timer = setTimeout(function() {
-        //     // console.log("[ERROR] Attempt at connection exceeded timeout value");
-        //     .clientSocket.end();
-        // }, timeout);
     });
 
 
@@ -160,11 +161,11 @@ function startSyslog() {
     })
 
     server.on('error', (err) => {
-        console.error(`Server error: ${err}`);
+        logger.error(`Server error: ${err}`);
     });
 
     server.listen(logServerPort, () => {
-        console.log(`Server listening on port ${logServerPort}`);
+        logger.info(`Server listening on port ${logServerPort}`);
     });
 }
 
@@ -211,12 +212,6 @@ function sendRequest(reqIn, outIdx) {
 
         // The whole response has been received.
         res.on('end', () => {
-            // console.log('Got a response');
-            // const escapedData = querystring.unescape(data);
-            // console.log(`Data: ${escapedData}`);
-
-            // TODO: clear data from array/db
-
         });
 
     });
@@ -224,11 +219,11 @@ function sendRequest(reqIn, outIdx) {
     try {
         req.write("{data}");
     } catch (error) {
-        console.log(`Error sending payload ${error.message}`);
+        logger.error(`Error sending payload ${error.message}`);
     }
 
     req.on('error', (e) => {
-        console.error(`Problem with request: ${e.message}`);
+        logger.error(`Problem with request: ${e.message}`);
     });
 
     req.end();
@@ -248,23 +243,20 @@ function createWebServer() {
                 const logEntry = logEntries.find(element => element.key === req.headers['logidx']);
                 if (logEntry) {
                     const logResponse = logEntry.response;
-                    // console.log(`Log Entry for ${req.headers['logidx']}`, logResponse);
-                    // res.setHeader('Content-Type', logResponse.headers["Content-Type"]);
                     res.headers = logResponse.headers;
                     res.statusCode = logResponse.status;
                     res.end(logResponse.payload);
-                    // console.log(`Sent: `, logResponse.payload);
+                    logger.verbose(`Sent: `, logResponse.payload);
 
                 } else {
-                    console.log(`Log Entry not found for ${req.headers['logidx']}`)
+                    logger.error(`Log Entry not found for ${req.headers['logidx']}`)
                     res.setHeader('Content-Type', "application/json");
                     res.statusCode = 500;
                     res.end(`Error setting content type ${error.message}\n\n`);
                 }
-                // logEntries[req.headers['logIdx']] = [];
             }
         } catch (error) {
-            // console.log(error);
+            logger.error(error);
             res.statusCode = 500;
             res.setHeader('Content-Type', "application/json");
             res.end('{"error":"Internal server error"}');
@@ -272,7 +264,7 @@ function createWebServer() {
     });
 
     server.listen(webServerPort, webServerIP, () => {
-        console.log('Server running at http://' + webServerIP + ':' + webServerPort + '/');
+        logger.info('Server running at http://' + webServerIP + ':' + webServerPort + '/');
     });
 }
 
@@ -282,9 +274,9 @@ function removeElement(array, removeKey) {
     if (index !== -1) {
         // Remove the element from the array
         array.splice(index, 1);
-        console.log(`Element with key "${removeKey}" removed successfully.`);
+        logger.verbose(`Element with key "${removeKey}" removed successfully.`);
     } else {
-        console.log(`Element with key "${removeKey}" not found.`);
+        logger.verbose(`Element with key "${removeKey}" not found.`);
     }
 }
 

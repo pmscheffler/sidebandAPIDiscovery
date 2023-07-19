@@ -4,3 +4,5 @@ scratch/*
 *.pcap
 *.key
 *.crt
+/node_modules/*
+*-lock*
