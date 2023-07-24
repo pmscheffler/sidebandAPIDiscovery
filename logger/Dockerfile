@@ -11,8 +11,7 @@ RUN openssl req -x509 -newkey rsa:4096 -keyout /etc/ssl/privateKey.key -out /etc
 
 COPY . .
 
-EXPOSE 3000
-EXPOSE 15514
+EXPOSE 15514 3000
 
 CMD [ "node", "apilogger.js" ]
 

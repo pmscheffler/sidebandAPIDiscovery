@@ -8,7 +8,7 @@ const winston = require('winston');
 
 // const logTargetIP = '10.1.1.9';
 const logger = winston.createLogger({
-    level: 'info',
+    level: 'verbose',
     format: winston.format.json(),
     defaultMeta: { service: 'user-service' },
     transports: [
@@ -64,6 +64,8 @@ function startSyslog() {
             logger.error(`Error reading targets: ${error.message}`);
         }
     });
+    logger.debug(util.inspect(vipTargets));
+    
     const dataChunks = []; //[utf8Encode.encode('{ "request": { "headers":[], "payload":"", "method":"get", "uri" : "/" }, "response": { "headers": [], "payload": "" } }') ];
 
     const server = tls.createServer(tlsOptions, (socket) => {
@@ -83,6 +85,7 @@ function startSyslog() {
                         try {
                             var jsonData = JSON.parse(querystring.unescape(packet));
                             // refactor to add to redis db
+                            // console.log(jsonData);
                             logger.verbose(jsonData);
                             const logIdx = crypto.randomBytes(16).toString("hex");
 
@@ -97,7 +100,9 @@ function startSyslog() {
 
                             sendRequest(jsonData.request, logIdx);
                         } catch (error) {
+                            // console.log(error);
                             logger.error(error);
+                            // console.log(querystring.unescape(packet));
                             logger.verbose(querystring.unescape(packet));
                             dataChunks.push(utf8Encode.encode(packet));
                         }
@@ -109,8 +114,7 @@ function startSyslog() {
                 // console.log(`we got data ${dataChunks}`);
 
             } catch (error) {
-                console.log(error.message);
-
+                logger.error(error.message);
             }
         });
         socket.on('end', () => {
@@ -125,6 +129,7 @@ function startSyslog() {
                     closeData.forEach(function (cData) {
                         var jsonData = JSON.parse(querystring.unescape(cData));
                         // refactor to add to redis db
+                        // console.log(jsonData);
                         logger.verbose(jsonData);
 
                         const logIdx = crypto.randomBytes(16).toString("hex");
@@ -141,13 +146,15 @@ function startSyslog() {
                     logger.verbose('client disconnected');
                 }
             } catch (error) {
+                // console.log(error);
                 logger.error(error);
+                // console.log(querystring.unescape(data));
                 logger.verbose(querystring.unescape(data));
             }
         });
 
         socket.on('error', (err) => {
-            console.error(err);
+            logger.error(err.message);
         });
     });
 
@@ -176,24 +183,28 @@ function sendRequest(reqIn, outIdx) {
     headers["logIdx"] = outIdx;
     headers["host"] = webTargetIP;
 
-    if (typeof headers["x-forwarded-for"] == 'undefined') {
-        // need to get the client IP added to the request log data
-        headers["x-forwarded-for"] = "";
-    } else {
-        headers["x-forwarded-for"] = reqIn.clientip.concat(",".concat(headers["x-forwarded-for"]));
-    }
+    // if (typeof headers["x-forwarded-for"] == 'undefined') {
+    //     // need to get the client IP added to the request log data
+    //     headers["x-forwarded-for"] = "";
+    // } else {
+    //     headers["x-forwarded-for"] = reqIn.clientip.concat(",".concat(headers["x-forwarded-for"]));
+    // }
 
     // find the proper XC LB to send the mimicked request to
-    const vipTarget = vipTargets.find(element => element.key === reqIn.virtualServerName);
+    logger.debug(`Looking for: ${querystring.unescape(reqIn.virtualServerName)}`);
+    const vipTarget = vipTargets.find(element => element.vip === querystring.unescape(reqIn.virtualServerName));
+    logger.debug(`Target in XC: ${util.inspect(vipTargets)}`);
 
     const options = {
-        hostname: vipTargetIP,
+        hostname: vipTarget.target,
         port: webTargetPort,
         path: reqIn.uri,
         method: reqIn.method,
         rejectUnauthorized: false,
         headers: headers
     }
+
+    logger.debug(`Options: ${util.inspect(options)}`);
 
     // we are passed the URL + Query String as [http::uri] so, we should be good
     if (reqIn.method.toLowerCase() == "get") {
@@ -218,11 +229,14 @@ function sendRequest(reqIn, outIdx) {
 
     try {
         req.write("{data}");
+        // console.log("Request sent");
     } catch (error) {
+        // console.log(`Error writing data: ${error.message}`);
         logger.error(`Error sending payload ${error.message}`);
     }
 
     req.on('error', (e) => {
+        // console.log(`Got an error`);
         logger.error(`Problem with request: ${e.message}`);
     });
 
@@ -242,6 +256,7 @@ function createWebServer() {
             } else {
                 const logEntry = logEntries.find(element => element.key === req.headers['logidx']);
                 if (logEntry) {
+                    logger.verbose(`Sending a response ${util.inspect(logEntry)}`);
                     const logResponse = logEntry.response;
                     res.headers = logResponse.headers;
                     res.statusCode = logResponse.status;
@@ -256,14 +271,14 @@ function createWebServer() {
                 }
             }
         } catch (error) {
-            logger.error(error);
+            logger.error(`Error in web server: ${(error.message)}`);
             res.statusCode = 500;
             res.setHeader('Content-Type', "application/json");
-            res.end('{"error":"Internal server error"}');
+            res.end(`{"error":"Internal server error ${error.message}"}`);
         }
     });
 
-    server.listen(webServerPort, webServerIP, () => {
+    server.listen(webServerPort, () => {
         logger.info('Server running at http://' + webServerIP + ':' + webServerPort + '/');
     });
 }
@@ -306,6 +321,7 @@ function createManagementAPI() {
     });
 
     server.listen(webServerPort, webServerIP, () => {
+        logger.info('Server running at http://' + webServerIP + ':' + managementPort + '/')
         console.log('Server running at http://' + webServerIP + ':' + managementPort + '/');
     });
 }
