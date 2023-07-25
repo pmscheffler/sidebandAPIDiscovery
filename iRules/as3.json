@@ -1,0 +1,88 @@
+{
+    "class": "AS3",
+    "declaration": {
+      "schemaVersion": "3.22.0",
+      "id": "example_as3_declaration",
+      "label": "AS3 Declaration for Unencrypted Log Target and Encrypted Logging Target",
+      "remark": "This AS3 declaration configures a pool, an iRule, a data group, and a virtual server on the BIG-IP device.",
+      "tenant": "Common",
+      "A3": true,
+      "inheritedDevicegroup": {
+        "deviceGroup": "Group_Name",
+        "inheritedTrafficGroup": "Traffic_Group_Name"
+      },
+      "shared": {
+        "httpsPort": 15514
+      },
+      "persist": [
+        {
+          "name": "my_cookie_persistence",
+          "defaultExpiration": "360"
+        }
+      ],
+      "pool": {
+        "unencrypted_log_target": {
+          "class": "Pool",
+          "monitors": [
+            "tcp"
+          ],
+          "members": [
+            {
+              "servicePort": 15514,
+              "serverAddresses": [
+                "10.0.0.1"
+              ]
+            },
+            {
+              "servicePort": 15514,
+              "serverAddresses": [
+                "10.0.0.2"
+              ]
+            }
+            // Add more members as needed
+          ]
+        }
+      },
+      "iRule": {
+        "github_raw_file_irule": {
+          "class": "iRule",
+          "iRule": "# Your iRule code from GitHub raw file here\n"
+        }
+      },
+      "dataGroup": {
+        "protected_fields": {
+          "class": "DataGroup",
+          "type": "string",
+          "records": [
+            {
+              "name": "protected_field_1",
+              "value": "sensitive_data_1"
+            },
+            {
+              "name": "protected_field_2",
+              "value": "sensitive_data_2"
+            }
+          ]
+        }
+      },
+      "virtualServer": {
+        "encrypted_logging_target": {
+          "class": "VirtualServer",
+          "virtualAddresses": [
+            "192.168.1.100" // Replace with the desired IP address for the virtual server
+          ],
+          "pool": "unencrypted_log_target",
+          "profiles": [
+            {
+              "name": "server_ssl_profile",
+              "context": "serverside"
+            }
+          ],
+          "iRules": [
+            "/Common/github_raw_file_irule"
+          ]
+        }
+      }
+    }
+  }
+  
