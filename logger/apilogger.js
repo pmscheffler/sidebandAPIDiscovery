@@ -8,7 +8,7 @@ const winston = require('winston');
 
 // const logTargetIP = '10.1.1.9';
 const logger = winston.createLogger({
-    level: 'verbose',
+    level: process.env.LOGLEVEL,
     format: winston.format.json(),
     defaultMeta: { service: 'user-service' },
     transports: [
@@ -25,8 +25,8 @@ const logger = winston.createLogger({
 const webServerIP = '127.0.0.1';
 const webTargetIP = 'scheff-external-logger.sa.f5demos.com';
 const webTargetPort = 80;
-const webServerPort = 3000;
-const logServerPort = 15514;
+const webServerPort = process.env.WEBPORT;
+const logServerPort = process.env.LOGGERPORT;
 // var logIdx = 0;
 var logEntries = [];
 var vipTargets = [];
