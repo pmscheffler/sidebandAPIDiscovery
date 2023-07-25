@@ -2,7 +2,7 @@ when RULE_INIT priority 900 {
 	# Log debug locally to /var/log/ltm? 1=yes, 0=no
 	set static::f5_api_hsl_debug 1
 	# Pool name to post the API activity data to
-	set static::f5_api_hsl_pool "/Common/f5_api-collector-pool"
+	set static::f5_api_hsl_pool "/Common/unencrypted-log-pool"
 	# Maximum payload size
 	set static::f5_api_max_payload 102400
 }
@@ -16,6 +16,7 @@ when CLIENT_ACCEPTED priority 900 {
 		set bypass 0
 		# Open a new HSL connection if one is not available
 		set hsl [HSL::open -proto TCP -pool $static::f5_api_hsl_pool]
+		# set hsl [HSL::open -publisher /Common/api-log-publisher ]
 		if {$static::f5_api_hsl_debug} {log local0. "[IP::client_addr]:[TCP::client_port]: New hsl handle: $hsl"}
 		IP::protocol
 	}
@@ -34,8 +35,8 @@ when HTTP_REQUEST priority 900 {
 				log local0. "Auth: [URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]"
 				append reqJsonArrayStr "\"$headerName\": \"[URI::encode [substr [HTTP::header value $headerName] 0 " " ] ]\","
 			} else {
-
-				append reqJsonArrayStr "\"$headerName\": \"[URI::encode [HTTP::header value $headerName]]\","
+			    set headerValue [string map {"\"" "&quot;"} [HTTP::header value $headerName] ]
+				append reqJsonArrayStr "\"$headerName\": \"[URI::encode $headerValue]\","
 			}
 		}
 		set reqJsonArrayStr [string trimright $reqJsonArrayStr ,]
@@ -116,8 +117,8 @@ when HTTP_RESPONSE_DATA priority 900 {
 			\"virtualServerName\": \"[URI::encode [virtual name] ]\", \
 			\"method\": $req_data(method), \
 			\"requestTimestamp\": $requestTime, \
-			\"uri\": \"$req_data(uri)\"," \
-			\"clientip": \"$req_data(clientip)\""
+			\"uri\": $req_data(uri), \
+			\"clientip\": \"$req_data(clientip) \""
 
 		if { [string length $req_data(payload)] > 0 } {
 			set req_data_msg [ concat $req_data_msg ",\"payload\": \"[URI::encode $req_data(payload)]\"" ]
@@ -127,8 +128,8 @@ when HTTP_RESPONSE_DATA priority 900 {
 		# Formatting HTTP response data
 		set resJsonArrayStr "\{"
 		foreach headerName [HTTP::header names] {
-			set headerValue [URI::encode [HTTP::header value $headerName]]
-			
+		    set headerValue [string map {"\"" "&quot;"} [HTTP::header value $headerName] ]
+
 			if { [class match $headerName equals protected_fields ] } {
 				set headerValue  [class match -value $headerName equals protected_fields ]
 			} 
@@ -142,17 +143,14 @@ when HTTP_RESPONSE_DATA priority 900 {
 			\"status\": [HTTP::status]"
 
 		if {not $res_chunked} {
-			set res_data_msg [ concat $res_data_msg ",\"payload\": \"[URI::encode [HTTP::payload] ]\"" ]
+			set res_data_msg [ concat $res_data_msg ",\"payload\": \"[URI::encode [string map {"\"" "&quot;"} [HTTP::payload] ] ]\"" ]
 		}
 		set res_data_msg [ concat "\"response\": { $res_data_msg }" ]
 
 		# set res_data_msg "\"response\":\"\""
 		log local0. "Sending: {$req_data_msg, $res_data_msg}"
-		HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n"
 		# URI Encode the whole message to ensure message sent as single log event
-		# if { [ catch { HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n" } ] } {
-		# 	log local0. "Error sending data to HSL"
-		# }
+		HSL::send $hsl "[URI::encode "{$req_data_msg, $res_data_msg}"] \n\n"
 	}
 }
 

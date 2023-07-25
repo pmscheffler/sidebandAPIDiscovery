@@ -183,12 +183,15 @@ function sendRequest(reqIn, outIdx) {
     headers["logIdx"] = outIdx;
     headers["host"] = webTargetIP;
 
-    // if (typeof headers["x-forwarded-for"] == 'undefined') {
-    //     // need to get the client IP added to the request log data
-    //     headers["x-forwarded-for"] = "";
-    // } else {
-    //     headers["x-forwarded-for"] = reqIn.clientip.concat(",".concat(headers["x-forwarded-for"]));
-    // }
+    if (typeof headers["x-forwarded-for"] == 'undefined') {
+        // need to get the client IP added to the request log data
+        headers["x-forwarded-for"] = reqIn.clientip;
+    } else {
+        headers["x-forwarded-for"] = reqIn.clientip + "," + headers["x-forwarded-for"];
+    }
+    console.log(`reqIn: ${util.inspect(reqIn)}`);
+    console.log(`X-Forwarded-For: ${headers["x-forwarded-for"]}`)
+    logger.verbose(`X-Forwarded-For: ${headers["x-forwarded-for"]}`);
 
     // find the proper XC LB to send the mimicked request to
     logger.debug(`Looking for: ${querystring.unescape(reqIn.virtualServerName)}`);
@@ -205,6 +208,7 @@ function sendRequest(reqIn, outIdx) {
     }
 
     logger.debug(`Options: ${util.inspect(options)}`);
+    console.log(`Options: ${util.inspect(options)}`);
 
     // we are passed the URL + Query String as [http::uri] so, we should be good
     if (reqIn.method.toLowerCase() == "get") {
