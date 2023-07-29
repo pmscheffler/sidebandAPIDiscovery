@@ -1,5 +1,5 @@
 #! /bin/sh
-echo off
+# echo off
 echo username: $1
 echo host: $2
 echo productid: $3
