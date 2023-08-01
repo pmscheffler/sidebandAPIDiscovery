@@ -1,10 +1,15 @@
-FROM node:20
+FROM alpine:latest
 
 # set the email for the test run
 ENV email=dockertest
 ENV target=target
 
-RUN useradd -ms /bin/bash --create-home --shell /bin/bash tester
+# install required tools before switching to the basic user
+
+RUN apk add jq curl
+
+# add the user 'tester' so we aren't running as a priv-user
+RUN adduser --disabled-password -S tester
 USER tester
 
 WORKDIR /home/tester
