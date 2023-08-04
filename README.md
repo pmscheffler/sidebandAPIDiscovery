@@ -40,11 +40,18 @@ These can be changed at run time with the -e parameter
 Run will need to include a reference to the viplist.csv
 CSV format of vipname, lbtarget
 
+## Running the Container
 
-To Run the Logger via Docker:
+To Run the Logger via Docker or Podman:
 
 ```bash
 <docker/podman> run --rm -p <localip of vm>:3000:3000 -p <localip of vm>:15514:15514 -e LOGLEVEL=verbose  --name apilogger pmscheffler/apilogger
+```
+
+The container includes a basic key and certificate for the TLS connections, but if you want to add a specific key and cert, add this to the run line:
+
+```bash
+--mount type=bind,source=<path to your key>,target=/etc/ssl/privateKey.key,readonly --mount type=bind,source=<path to your cert>,target=/etc/ssl/certificate.crt,readonly
 ```
 
 ## Testing
