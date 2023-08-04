@@ -8,7 +8,7 @@ This repo helps extract web traffic from an F5 BIG-IP in real time and then push
 
 ### BIG-IP Config
 
-In order to gather the data, the BIG-IP Virutal Server will need to have the iRule (iRules/sidebandLogger.tcl) added.  The iRule references a Data Group (/Common/protected_field) and an HSL Pool (/Common/unencrypted-log-pool).  To allow off-box encrypted log traffic, a VIP needs to be created with no Client SSL profile and a Server SSL Profile, with a pool targeting the incoming log port of the apilogger container (by default, this is 15514).
+In order to gather the data, the BIG-IP Virutal Server will need to have the iRule (iRules/sidebandLogger.tcl) added.  The iRule references a Data Group (/Common/protected_field) and an HSL Pool (/Common/unencrypted-log-pool).  To allow off-box encrypted log traffic, a VIP needs to be created with no Client SSL profile and a Server SSL Profile, with a pool targeting the incoming log port of the apilogger container (by default, this is 15514).  For more information on how to set up TLS HSL Logging, see this <a href="https://techdocs.f5.com/en-us/bigip-15-0-0/external-monitoring-of-big-ip-systems-implementations/setting-up-secure-remote-logging.html" target="_blank">article</a>
 
 For XFF to work properly:
 
