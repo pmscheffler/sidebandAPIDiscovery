@@ -249,9 +249,10 @@ function sendRequest(reqIn, outIdx) {
 }
 
 function createWebServer() {
+    const httpsWS = require('https');
     const httpWS = require('http');
 
-    const server = httpWS.createServer((req, res) => {
+    const server = httpsWS.createServer(tlsOptions, (req, res) => {
 
         try {
             if (typeof req.headers['logidx'] == 'undefined') {
@@ -283,7 +284,7 @@ function createWebServer() {
     });
 
     server.listen(webServerPort, () => {
-        logger.info('Server running at http://' + webServerIP + ':' + webServerPort + '/');
+        logger.info('Server running at https://' + webServerIP + ':' + webServerPort + '/');
     });
 }
 
