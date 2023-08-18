@@ -252,7 +252,7 @@ function createWebServer() {
     const httpsWS = require('https');
     const httpWS = require('http');
 
-    const server = httpsWS.createServer(tlsOptions, (req, res) => {
+    const server = httpWS.createServer((req, res) => {
 
         try {
             if (typeof req.headers['logidx'] == 'undefined') {

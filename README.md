@@ -54,6 +54,16 @@ The container includes a basic key and certificate for the TLS connections, but 
 --mount type=bind,source=<path to your key>,target=/etc/ssl/privateKey.key,readonly --mount type=bind,source=<path to your cert>,target=/etc/ssl/certificate.crt,readonly
 ```
 
+## Example Run
+
+This line shows running the container and pointing the log files to a local combined.log and error.log, with LOGLEVEL set to debug
+
+```bash
+docker run -d --restart unless-stopped -p 10.0.10.188:3000:3000 -p 10.0.10.188:15514:15514 -e LOGLEVEL=debug --mount type=bind,source=$PW
+D/combined.log,target=/usr/src/logger/combined.log,readonly --mount type=bind,source=$PWD/error.log,target=/usr/src/logger/error.log,readonly --name a
+pilogger pmscheffler/apilogger
+```
+
 ## Testing
 
 In the /testing folder there is a script which can be used to test against the UDF Blueprint
